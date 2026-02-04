@@ -177,7 +177,7 @@ export class Requester<OutgoingMessages extends MethodMapGeneric> {
     }
     call<Name extends Extract<keyof OutgoingMessages, string>>(name: Name, ...args: MethodArgs<OutgoingMessages, Name>): Promise<Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>>> {
         if (this.queryInfo) {
-            return this.broadcastToQueriedTabs(this.queryInfo, name, ...args) as any
+            this.broadcastToQueriedTabs(this.queryInfo, name, ...args)
         }
         return chrome.runtime.sendMessage({
             type: "request",
@@ -214,3 +214,4 @@ export class Requester<OutgoingMessages extends MethodMapGeneric> {
         })
     }
 }
+
