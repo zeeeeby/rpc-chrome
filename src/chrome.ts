@@ -1,4 +1,4 @@
-import { methodProxy } from "./proxy"
+import { broadcastMethodProxy, methodProxy } from "./proxy"
 
 function belongsToChannelSimple(message: unknown, channel: string): message is { channel: string, type: string } {
     if (typeof message != "object")
@@ -151,6 +151,81 @@ function removeFromArray<T>(array: T[], item: T) {
     array.splice(index, 1)
 }
 
+export class RuntimeRequester<OutgoingMessages extends MethodMapGeneric> {
+    channel: string;
+    proxy = methodProxy<OutgoingMessages>((name, ...args) => this.call(name, ...args));
+
+    constructor(channel: string) {
+        this.channel = channel;
+    }
+
+    call<Name extends Extract<keyof OutgoingMessages, string>>(name: Name, ...args: MethodArgs<OutgoingMessages, Name>) {
+        return chrome.runtime.sendMessage({
+            type: "request",
+            channel: this.channel,
+            method: name,
+            args
+        } satisfies SimpleRequest<any>).then(response => {
+            if (isError(response)) {
+                let error = new Error(`Error in method ${name}: ${response.error?.message || "Unknown error"}`)
+                error.stack = response.error?.stack
+                throw error
+            }
+            return response as Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>>
+        })
+    }
+}
+
+export class ContentScriptRequester<OutgoingMessages extends MethodMapGeneric> {
+    channel: string;
+    queryInfo: chrome.tabs.QueryInfo;
+
+    proxy = broadcastMethodProxy<OutgoingMessages>((name, ...args) => this.call(name, ...args));
+
+    constructor(channel: string, queryInfo: chrome.tabs.QueryInfo) {
+        this.channel = channel;
+        this.queryInfo = queryInfo;
+    }
+
+    async call<Name extends Extract<keyof OutgoingMessages, string>>(
+        name: Name,
+        ...args: MethodArgs<OutgoingMessages, Name>
+    ): Promise<Array<{ tabId: number, response: Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>> }>> {
+        const tabs = await chrome.tabs.query(this.queryInfo);
+
+        const results: Array<{ tabId: number, response: Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>> }> = [];
+
+        const promises = tabs.map(async (tab) => {
+            if (isInvalidTabId(tab.id)) return;
+
+            try {
+                const response = await chrome.tabs.sendMessage(tab.id, {
+                    type: "request",
+                    channel: this.channel,
+                    method: name,
+                    args
+                } satisfies SimpleRequest<any>);
+
+                if (isError(response)) {
+                    let error = new Error(`Error in method ${name} (tab ${tab.id}): ${response.error?.message || "Unknown error"}`);
+                    error.stack = response.error?.stack;
+                    throw error;
+                }
+
+                results.push({
+                    tabId: tab.id,
+                    response: response as Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>>
+                });
+            } catch (e) {
+                console.debug(`ContentScriptRequester: Tab ${tab.id} did not respond to ${name}`, e);
+            }
+        });
+
+        await Promise.all(promises);
+        return results;
+    }
+}
+
 export class Requester<OutgoingMessages extends MethodMapGeneric> {
     channel: string;
     queryInfo?: chrome.tabs.QueryInfo;
@@ -175,6 +250,7 @@ export class Requester<OutgoingMessages extends MethodMapGeneric> {
             });
         });
     }
+
     call<Name extends Extract<keyof OutgoingMessages, string>>(name: Name, ...args: MethodArgs<OutgoingMessages, Name>): Promise<Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>>> {
         if (this.queryInfo) {
             this.broadcastToQueriedTabs(this.queryInfo, name, ...args)
