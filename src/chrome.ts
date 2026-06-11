@@ -103,7 +103,7 @@ export class Responder<IncomingMessages extends MethodMapGeneric> {
                 response = await handler(msg.method, msg.args as MethodArgs<IncomingMessages, string>)
 
             let handlers = this.handlers[msg.method]
-            if (handlers)
+            if (handlers && handlers.length > 0)
                 for (let handler of (handlers || []))
                     response = await handler(...msg.args as MethodArgs<IncomingMessages, string>)
             else if (!this.universalHandlers.length)
