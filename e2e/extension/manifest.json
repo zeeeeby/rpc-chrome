@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "RPC Chrome Test Fixture",
+  "version": "1.0.0",
+  "description": "Fixture extension for testing rpc-chrome",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "action": {},
+  "permissions": ["tabs"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"]
+}

@@ -23,3 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 .aider*
+
+# Test artifacts
+.e2e-extension
+.e2e-profile*
+test-results
+playwright-report
+blob-report
+.package-test
+.package-test-browser
+*.tgz
