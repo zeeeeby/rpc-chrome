@@ -90,10 +90,14 @@ export class Responder<IncomingMessages extends MethodMapGeneric> {
         }
     }
     onMessageEvent = (msg: SimpleRequest<any[]>, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
-        if (!belongsToChannelSimple(msg, this.channel))
+        if (!belongsToChannelSimple(msg, this.channel) || !isRequest(msg))
             return
-        if (isRequest(msg))
-            this.handleRequest(msg, sender, sendResponse)
+
+        const hasHandler = Boolean(this.handlers[msg.method]?.length || this.universalHandlers.length)
+        if (!hasHandler)
+            return
+
+        this.handleRequest(msg, sender, sendResponse)
         return true
     }
     async handleRequest(msg: SimpleRequest<any[]>, _: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) {
@@ -104,18 +108,9 @@ export class Responder<IncomingMessages extends MethodMapGeneric> {
 
             let handlers = this.handlers[msg.method]
             if (handlers && handlers.length > 0)
-                for (let handler of (handlers || []))
+                for (let handler of handlers)
                     response = await handler(...msg.args as MethodArgs<IncomingMessages, string>)
-            else if (!this.universalHandlers.length) {
-                sendResponse({
-                    type: "error",
-                    channel: this.channel,
-                    error: {
-                        message: `Method ${msg.method} not found`
-                    }
-                } satisfies SimpleError)
-                return
-            }
+
             sendResponse(response)
         }
         catch (e) {
