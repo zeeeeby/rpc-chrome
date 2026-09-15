@@ -106,8 +106,16 @@ export class Responder<IncomingMessages extends MethodMapGeneric> {
             if (handlers && handlers.length > 0)
                 for (let handler of (handlers || []))
                     response = await handler(...msg.args as MethodArgs<IncomingMessages, string>)
-            else if (!this.universalHandlers.length)
+            else if (!this.universalHandlers.length) {
+                sendResponse({
+                    type: "error",
+                    channel: this.channel,
+                    error: {
+                        message: `Method ${msg.method} not found`
+                    }
+                } satisfies SimpleError)
                 return
+            }
             sendResponse(response)
         }
         catch (e) {
@@ -151,6 +159,19 @@ function removeFromArray<T>(array: T[], item: T) {
     array.splice(index, 1)
 }
 
+// ponytail: 3 retries @ 60ms covers MV3 worker boot without backoff config
+async function sendRuntimeMessage(message: unknown, retries = 3): Promise<any> {
+    for (let i = 0; ; i++) {
+        try {
+            return await chrome.runtime.sendMessage(message)
+        } catch (err: any) {
+            if (i >= retries || !/receiving end does not exist/i.test(err?.message ?? String(err)))
+                throw err
+            await new Promise(r => setTimeout(r, 60))
+        }
+    }
+}
+
 export class RuntimeRequester<OutgoingMessages extends MethodMapGeneric> {
     channel: string;
     proxy = methodProxy<OutgoingMessages>((name, ...args) => this.call(name, ...args));
@@ -160,7 +181,7 @@ export class RuntimeRequester<OutgoingMessages extends MethodMapGeneric> {
     }
 
     call<Name extends Extract<keyof OutgoingMessages, string>>(name: Name, ...args: MethodArgs<OutgoingMessages, Name>) {
-        return chrome.runtime.sendMessage({
+        return sendRuntimeMessage({
             type: "request",
             channel: this.channel,
             method: name,
@@ -255,7 +276,7 @@ export class Requester<OutgoingMessages extends MethodMapGeneric> {
         if (this.queryInfo) {
             this.broadcastToQueriedTabs(this.queryInfo, name, ...args)
         }
-        return chrome.runtime.sendMessage({
+        return sendRuntimeMessage({
             type: "request",
             channel: this.channel,
             method: name,
