@@ -1,4 +1,4 @@
-import { broadcastMethodProxy, methodProxy } from "./proxy"
+import { broadcastMethodProxy, methodProxy, MethodProxy } from "./proxy"
 
 function belongsToChannelSimple(message: unknown, channel: string): message is { channel: string, type: string } {
     if (typeof message != "object")
@@ -271,7 +271,21 @@ export class Requester<OutgoingMessages extends MethodMapGeneric> {
         if (this.queryInfo) {
             this.broadcastToQueriedTabs(this.queryInfo, name, ...args)
         }
-        return sendRuntimeMessage({
+        return this.sendRuntime(name, args)
+    }
+
+    to(queryInfo: chrome.tabs.QueryInfo): MethodProxy<OutgoingMessages> {
+        return methodProxy((name, ...args) => {
+            this.broadcastToQueriedTabs(queryInfo, name, ...args)
+            return this.sendRuntime(name, args)
+        })
+    }
+
+    private sendRuntime<Name extends Extract<keyof OutgoingMessages, string>>(
+        name: Name,
+        args: MethodArgs<OutgoingMessages, Name>
+    ): Promise<Awaited<ReturnTypeOfMethod<OutgoingMessages, Name>>> {
+        return chrome.runtime.sendMessage({
             type: "request",
             channel: this.channel,
             method: name,
