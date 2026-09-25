@@ -96,3 +96,21 @@ describe("Requester", () => {
         expect(sendMessageMock).toHaveBeenCalledTimes(1)
     })
 })
+
+describe("Requester sync-throw", () => {
+    beforeEach(() => {
+        sendMessageMock.mockReset().mockResolvedValue("pong")
+        tabsQueryMock.mockReset()
+        tabsSendMessageMock.mockReset().mockResolvedValue("pong")
+    })
+
+    it("to() propagates sync throw from tabs.query and skips runtime", () => {
+        tabsQueryMock.mockImplementation(() => {
+            throw new Error("Invalid match pattern")
+        })
+
+        const requester = new Requester<Messages>("test-channel")
+        expect(() => requester.to({ url: "bad" }).ping(1)).toThrow("Invalid match pattern")
+        expect(sendMessageMock).not.toHaveBeenCalled()
+    })
+})

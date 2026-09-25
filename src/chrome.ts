@@ -253,7 +253,7 @@ export class Requester<OutgoingMessages extends MethodMapGeneric> {
         this.queryInfo = queryInfo;
     }
 
-    private async broadcastToQueriedTabs<Name extends Extract<keyof OutgoingMessages, string>>(
+    private broadcastToQueriedTabs<Name extends Extract<keyof OutgoingMessages, string>>(
         queryInfo: chrome.tabs.QueryInfo,
         name: Name,
         ...args: MethodArgs<OutgoingMessages, Name>
